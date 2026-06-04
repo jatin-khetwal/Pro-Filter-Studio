@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Filter Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --panel-bg: #1e1e1e;
+            --workspace-bg: #121212;
+            --accent: #3b82f6;
+        }
+        body {
+            background-color: var(--workspace-bg);
+            color: #e5e7eb;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .canvas-container {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 90%;
+            max-height: 80vh;
+        }
+        canvas {
+            display: block;
+            image-rendering: auto;
+        }
+        .custom-slider {
+            -webkit-appearance: none;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+        .custom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .sidebar {
+            width: 320px;
+            background-color: var(--panel-bg);
+            border-left: 1px solid #333;
+        }
+        .toolbar {
+            height: 60px;
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid #333;
+        }
+        .loading-overlay {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+        }
+        .tab-btn.active {
+            border-bottom-color: var(--accent);
+            color: white;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <!-- Toolbar -->
+    <nav class="toolbar flex items-center justify-between px-6 shrink-0">
+        <div class="flex items-center gap-4">
+            <h1 class="text-lg font-bold tracking-tight text-white">FILTER<span class="text-blue-500">STUDIO</span></h1>
+            <div class="h-6 w-px bg-gray-700 mx-2"></div>
+            <button id="undoBtn" class="p-2 hover:bg-gray-800 rounded disabled:opacity-30" title="Undo (Ctrl+Z)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+            </button>
+            <button id="redoBtn" class="p-2 hover:bg-gray-800 rounded disabled:opacity-30" title="Redo (Ctrl+Y)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+            </button>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <label for="imageLoader" class="cursor-pointer bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-md text-sm font-medium transition">
+                Open Image
+                <input type="file" id="imageLoader" accept="image/*" class="hidden">
+            </label>
+            <button id="downloadBtn" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-md text-sm font-medium transition">
+                Export
+            </button>
+        </div>
+    </nav>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Main Workspace -->
+        <main class="flex-1 relative flex items-center justify-center p-8 overflow-auto">
+            <div id="dropZone" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity">
+                <div class="bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-xl p-12 text-blue-400">
+                    Drop image to start editing
+                </div>
+            </div>
+            
+            <div id="canvasWrapper" class="canvas-container bg-neutral-900 rounded-lg overflow-hidden hidden">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+
+            <div id="emptyState" class="text-center">
+                <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-300">No image loaded</h2>
+                <p class="text-gray-500 mt-2">Upload a photo to begin applying professional filters.</p>
+            </div>
+        </main>
+
+        <!-- Sidebar Panels -->
+        <aside class="sidebar flex flex-col h-full">
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-800 shrink-0">
+                <button id="tabAdjust" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 active">Adjustments</button>
+                <button id="tabEffects" class="tab-btn flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-300">Effects</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <!-- Adjustments Panel -->
+                <div id="panelAdjust" class="p-6 space-y-8">
+                    <section>
+                        <h3 class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-6">Basic Correction</h3>
+                        <div class="space-y-6">
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs text-gray-400">
+                                    <span>Brightness</span>
+                                    <span id="brightVal">0</span>
+                                </div>
+                                <input type="range" id="brightness" min="-100" max="100" value="0" class="w-full custom-slider">
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs text-gray-400">
+                                    <span>Contrast</span>
+                                    <span id="contrastVal">0</span>
+                                </div>
+                                <input type="range" id="contrast" min="-100" max="100" value="0" class="w-full custom-slider">
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs text-gray-400">
+                                    <span>Saturation</span>
+                                    <span id="satVal">0</span>
+                                </div>
+                                <input type="range" id="saturation" min="-100" max="100" value="0" class="w-full custom-slider">
+                            </div>
+                        </div>
+                        <button id="applyAdjustmentBtn" class="w-full mt-6 bg-gray-800 hover:bg-gray-700 py-2 rounded text-xs font-bold">COMMIT ADJUSTMENTS</button>
+                    </section>
+                </div>
+
+                <!-- Effects Panel -->
+                <div id="panelEffects" class="p-6 space-y-8 hidden">
+                    <section>
+                        <h3 class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Color Presets</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button data-effect="grayscale" class="effect-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Grayscale</button>
+                            <button data-effect="sepia" class="effect-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Sepia</button>
+                            <button data-effect="invert" class="effect-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Invert</button>
+                            <button data-effect="vintage" class="effect-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Vintage</button>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Spatial Kernels</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button data-kernel="blur" class="kernel-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Gaussian Blur</button>
+                            <button data-kernel="sharpen" class="kernel-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Sharpen</button>
+                            <button data-kernel="emboss" class="kernel-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Emboss</button>
+                            <button data-kernel="edges" class="kernel-btn bg-gray-800 hover:bg-gray-700 py-3 rounded text-sm transition">Edge Detect</button>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="p-6 pt-0">
+                    <button id="resetBtn" class="w-full border border-red-900/50 text-red-500 hover:bg-red-900/20 py-3 rounded-md text-sm font-medium transition">
+                        Reset All Changes
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Loading UI -->
+    <div id="loader" class="fixed inset-0 loading-overlay hidden z-50 flex flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="mt-4 font-medium">Processing Pixels...</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const loader = document.getElementById('imageLoader');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+        const emptyState = document.getElementById('emptyState');
+        const loadingIndicator = document.getElementById('loader');
+
+        // State Management
+        let history = [];
+        let historyIndex = -1;
+        const MAX_HISTORY = 20;
+        let baseImage = null; // The image current sliders are working from
+
+        const sliders = {
+            brightness: { el: document.getElementById('brightness'), val: document.getElementById('brightVal') },
+            contrast: { el: document.getElementById('contrast'), val: document.getElementById('contrastVal') },
+            saturation: { el: document.getElementById('saturation'), val: document.getElementById('satVal') }
+        };
+
+        // --- Tabs Logic ---
+        document.getElementById('tabAdjust').onclick = () => switchTab('adjust');
+        document.getElementById('tabEffects').onclick = () => switchTab('effects');
+
+        function switchTab(tab) {
+            document.getElementById('tabAdjust').classList.toggle('active', tab === 'adjust');
+            document.getElementById('tabEffects').classList.toggle('active', tab === 'effects');
+            document.getElementById('panelAdjust').classList.toggle('hidden', tab !== 'adjust');
+            document.getElementById('panelEffects').classList.toggle('hidden', tab !== 'effects');
+        }
+
+        // --- File Loading ---
+        loader.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const maxDim = 1600;
+                        let w = img.width, h = img.height;
+                        if (w > maxDim || h > maxDim) {
+                            const r = Math.min(maxDim/w, maxDim/h);
+                            w *= r; h *= r;
+                        }
+                        canvas.width = w;
+                        canvas.height = h;
+                        ctx.drawImage(img, 0, 0, w, h);
+                        baseImage = ctx.getImageData(0, 0, w, h);
+                        
+                        history = [ctx.getImageData(0, 0, w, h)];
+                        historyIndex = 0;
+                        updateHistoryUI();
+                        
+                        canvasWrapper.classList.remove('hidden');
+                        emptyState.classList.add('hidden');
+                        resetSliders();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // --- History Logic ---
+        function saveToHistory() {
+            const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+            history.push(snapshot);
+            if (history.length > MAX_HISTORY) history.shift();
+            else historyIndex++;
+            baseImage = snapshot; // Set new baseline for sliders
+            resetSliders();
+            updateHistoryUI();
+        }
+
+        function updateHistoryUI() {
+            document.getElementById('undoBtn').disabled = historyIndex <= 0;
+            document.getElementById('redoBtn').disabled = historyIndex >= history.length - 1;
+        }
+
+        document.getElementById('undoBtn').onclick = () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                const imgData = history[historyIndex];
+                ctx.putImageData(imgData, 0, 0);
+                baseImage = imgData;
+                resetSliders();
+                updateHistoryUI();
+            }
+        };
+
+        document.getElementById('redoBtn').onclick = () => {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                const imgData = history[historyIndex];
+                ctx.putImageData(imgData, 0, 0);
+                baseImage = imgData;
+                resetSliders();
+                updateHistoryUI();
+            }
+        };
+
+        // --- Adjustment Logic ---
+        let adjustTimer;
+        Object.values(sliders).forEach(s => {
+            s.el.oninput = () => {
+                s.val.innerText = s.el.value;
+                clearTimeout(adjustTimer);
+                adjustTimer = setTimeout(previewAdjustments, 10);
+            };
+        });
+
+        function resetSliders() {
+            Object.values(sliders).forEach(s => {
+                s.el.value = 0;
+                s.val.innerText = 0;
+            });
+        }
+
+        document.getElementById('applyAdjustmentBtn').onclick = () => {
+            saveToHistory();
+        };
+
+        function previewAdjustments() {
+            if (!baseImage) return;
+            const b = parseInt(sliders.brightness.el.value);
+            const c = parseInt(sliders.contrast.el.value);
+            const s = parseInt(sliders.saturation.el.value);
+
+            const pixels = new Uint8ClampedArray(baseImage.data);
+            const factor = (259 * (c + 255)) / (255 * (259 - c));
+            const satFactor = (s + 100) / 100;
+
+            for (let i = 0; i < pixels.length; i += 4) {
+                let r = pixels[i], g = pixels[i+1], bl = pixels[i+2];
+                // Brightness
+                r += b; g += b; bl += b;
+                // Contrast
+                r = factor * (r - 128) + 128;
+                g = factor * (g - 128) + 128;
+                bl = factor * (bl - 128) + 128;
+                // Saturation
+                const gray = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+                r = gray + (r - gray) * satFactor;
+                g = gray + (g - gray) * satFactor;
+                bl = gray + (bl - gray) * satFactor;
+
+                pixels[i] = r; pixels[i+1] = g; pixels[i+2] = bl;
+            }
+            ctx.putImageData(new ImageData(pixels, canvas.width, canvas.height), 0, 0);
+        }
+
+        // --- Effects Binding ---
+        document.querySelectorAll('.effect-btn').forEach(btn => {
+            btn.onclick = () => {
+                const type = btn.getAttribute('data-effect');
+                applyStaticEffect(type);
+            };
+        });
+
+        document.querySelectorAll('.kernel-btn').forEach(btn => {
+            btn.onclick = () => {
+                const type = btn.getAttribute('data-kernel');
+                applyKernelEffect(type);
+            };
+        });
+
+        function applyStaticEffect(type) {
+            if (!baseImage) return;
+            loadingIndicator.classList.remove('hidden');
+            
+            setTimeout(() => {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    if (type === 'grayscale') {
+                        const v = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                        data[i] = data[i+1] = data[i+2] = v;
+                    } else if (type === 'sepia') {
+                        data[i] = (r * .393) + (g *.769) + (b * .189);
+                        data[i+1] = (r * .349) + (g *.686) + (b * .168);
+                        data[i+2] = (r * .272) + (g *.534) + (b * .131);
+                    } else if (type === 'invert') {
+                        data[i] = 255 - r; data[i+1] = 255 - g; data[i+2] = 255 - b;
+                    } else if (type === 'vintage') {
+                        data[i] = r * 0.9; data[i+1] = g * 0.75; data[i+2] = b * 0.6;
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+                saveToHistory();
+                loadingIndicator.classList.add('hidden');
+            }, 50);
+        }
+
+        function applyKernelEffect(type) {
+            if (!baseImage) return;
+            const kernels = {
+                blur: [1/16, 2/16, 1/16, 2/16, 4/16, 2/16, 1/16, 2/16, 1/16],
+                sharpen: [0, -1, 0, -1, 5, -1, 0, -1, 0],
+                emboss: [-2, -1, 0, -1, 1, 1, 0, 1, 2],
+                edges: [0, 1, 0, 1, -4, 1, 0, 1, 0]
+            };
+            const w = kernels[type];
+            loadingIndicator.classList.remove('hidden');
+
+            setTimeout(() => {
+                const src = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const sw = src.width, sh = src.height;
+                const sd = src.data;
+                const output = ctx.createImageData(sw, sh);
+                const od = output.data;
+
+                for (let y = 1; y < sh - 1; y++) {
+                    for (let x = 1; x < sw - 1; x++) {
+                        let r=0, g=0, b=0;
+                        for (let ky = -1; ky <= 1; ky++) {
+                            for (let kx = -1; kx <= 1; kx++) {
+                                const weight = w[(ky + 1) * 3 + (kx + 1)];
+                                const pIdx = ((y + ky) * sw + (x + kx)) * 4;
+                                r += sd[pIdx] * weight;
+                                g += sd[pIdx+1] * weight;
+                                b += sd[pIdx+2] * weight;
+                            }
+                        }
+                        const i = (y * sw + x) * 4;
+                        od[i] = r; od[i+1] = g; od[i+2] = b; od[i+3] = 255;
+                    }
+                }
+                ctx.putImageData(output, 0, 0);
+                saveToHistory();
+                loadingIndicator.classList.add('hidden');
+            }, 50);
+        }
+
+        // --- Export ---
+        downloadBtn.onclick = () => {
+            if (!history[historyIndex]) return;
+            const link = document.createElement('a');
+            link.download = 'filter-studio-export.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+
+        document.getElementById('resetBtn').onclick = () => {
+            if (history.length > 0) {
+                ctx.putImageData(history[0], 0, 0);
+                saveToHistory();
+            }
+        };
+    </script>
+</body>
+</html>
