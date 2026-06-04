@@ -427,7 +427,7 @@
         // --- Export ---
         downloadBtn.onclick = () => {
             if (!history[historyIndex]) return;
-            
+
             const link = document.createElement('a');
             link.download = 'filter-studio-export.png';
             link.href = canvas.toDataURL('image/png');
