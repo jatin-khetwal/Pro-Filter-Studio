@@ -4,11 +4,8 @@ Pro Filter Studio is a browser-based image editing application built using HTML5
 
 ## 🚀 Live Demo
 
-Add your Vercel deployment link here:
+[View Live Project](https://pro-filter-studio.vercel.app)
 
-https://your-project.vercel.app
-
----
 
 ## ✨ Features
 
